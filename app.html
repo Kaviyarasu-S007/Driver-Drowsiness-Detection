@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drowsiness Detection App</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-image: url('https://img.freepik.com/premium-photo/old-black-background-grunge-texture-dark-wallpaper-blackboard-chalkboard-room-wall_959084-10.jpg');
+            background-size: cover;
+            font-family: 'Arial', sans-serif;
+        }
+
+        #app-bar {
+            background-color: #333;
+            color: white;
+            padding: 10px;
+            width: 100%;
+            text-align: center;
+            position: fixed;
+            top: 0;
+            z-index: 1000;
+        }
+
+        #container {
+            text-align: center;
+            max-width: 800px;
+            margin: 20px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        button {
+            padding: 15px;
+            margin: 10px;
+            font-size: 18px;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            outline: none;
+            transition: background-color 0.3s;
+        }
+
+        #start-button {
+            background-color: #4CAF50; /* Green */
+            color: white;
+        }
+
+        #stop-button {
+            background-color: #f44336; /* Red */
+            color: white;
+        }
+
+        .loading {
+            display: inline-block;
+            font-size: 18px;
+            margin-top: 15px;
+        }
+
+        .progress-bar-container {
+            margin-top: 15px;
+            text-align: left;
+            position: relative;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background-color: #ddd;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-top: 10px;
+            position: relative;
+        }
+
+        .progress-bar .progress, .progress-bar .progress-high {
+            height: 100%;
+            width: 0;
+            border-radius: 8px;
+            position: absolute;
+            top: 0;
+            left: 0;
+            text-align: center;
+            line-height: 30px;
+            font-weight: bold;
+        }
+
+        .progress-bar .progress {
+            background-color: #f44336; /* Red */
+            transition: width 0.5s ease-in-out;
+        }
+
+        .progress-bar .progress-high {
+            background-color: #4CAF50; /* Green */
+            transition: width 0.5s ease-in-out;
+        }
+
+        .label-text {
+            float: left;
+            margin-right: 15px;
+            font-weight: bold;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app-bar">
+        <h1>Drowsiness Detection App</h1>
+    </div>
+
+    <div id="container">
+        <button id="start-button" onclick="init()">Start</button>
+        <button id="stop-button" onclick="stop()">Stop</button>
+
+        <div id="webcam-container"></div>
+        <div id="label-container"></div>
+
+        <div class="progress-bar-container">
+            <div class="label-text">Drowsiness:</div>
+            <div class="progress-bar">
+                <div class="progress"></div>
+                <div class="confidence-text">0%</div>
+            </div>
+        </div>
+
+        <div class="progress-bar-container">
+            <div class="label-text">Non-Drowsiness:</div>
+            <div class="progress-bar">
+                <div class="progress-high"></div>
+                <div class="confidence-text">0%</div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest/dist/teachablemachine-image.min.js"></script>
+    <script type="text/javascript">
+        const URL = "https://teachablemachine.withgoogle.com/models/VbxpssaNg/";
+        let model, webcam, labelContainer, maxPredictions, progressBar, progressBarHigh;
+
+        async function init() {
+            const modelURL = URL + "model.json";
+            const metadataURL = URL + "metadata.json";
+
+            model = await tmImage.load(modelURL, metadataURL);
+            maxPredictions = model.getTotalClasses();
+
+            const flip = true;
+            webcam = new tmImage.Webcam(300, 300, flip);
+            await webcam.setup();
+            await webcam.play();
+            window.requestAnimationFrame(loop);
+
+            document.getElementById("webcam-container").appendChild(webcam.canvas);
+            labelContainer = document.getElementById("label-container");
+            progressBar = document.querySelectorAll('.progress-bar .progress')[0];
+            progressBarHigh = document.querySelectorAll('.progress-bar .progress-high')[0];
+
+            for (let i = 0; i < maxPredictions; i++) {
+                labelContainer.appendChild(document.createElement("div"));
+            }
+        }
+
+        async function loop() {
+            webcam.update();
+            await predict();
+            window.requestAnimationFrame(loop);
+        }
+
+        async function predict() {
+            const prediction = await model.predict(webcam.canvas);
+            for (let i = 0; i < maxPredictions; i++) {
+                const classPrediction = prediction[i].className;
+                const probability = prediction[i].probability.toFixed(2);
+
+                const labelDiv = labelContainer.childNodes[i];
+                const confidenceText = document.querySelectorAll('.confidence-text')[i];
+
+                const confidence = parseInt(probability * 100);
+                const loadingClass = confidence < 50 ? "low-confidence" : "high-confidence";
+                labelDiv.className = `loading ${loadingClass}`;
+                confidenceText.textContent = `${confidence}%`;
+
+                if (i === 0) {
+                    progressBar.style.width = `${confidence}%`;
+                } else if (i === 1) {
+                    progressBarHigh.style.width = `${confidence}%`;
+                }
+            }
+        }
+
+        function stop() {
+            webcam.stop();
+            document.getElementById("webcam-container").innerHTML = "";
+            document.getElementById("label-container").innerHTML = "";
+            progressBar.style.width = '0%';
+            progressBarHigh.style.width = '0%';
+        }
+    </script>
+</body>
+</html>
